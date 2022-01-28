@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+message msgDesc
+{
+uint64 startTimestamp = 1;  // can be google.protobuf.Timestamp
+uint64 endTimestamp = 2;    // can be google.protobuf.Timestamp
+
+uint64 startIndex = 3;
+uint64 endIndex = 4;
+
+uint32 measurement = 5;
+string measDescription = 6;
+}

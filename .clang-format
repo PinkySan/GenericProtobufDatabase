@@ -1,0 +1,12 @@
+﻿---
+BasedOnStyle: Microsoft
+AccessModifierOffset: '-4'
+AlignConsecutiveAssignments: 'true'
+AlwaysBreakTemplateDeclarations: 'Yes'
+BreakBeforeBraces: Allman
+ColumnLimit: '150'
+MaxEmptyLinesToKeep: '1'
+TabWidth: '4'
+UseTab: Never
+
+...
