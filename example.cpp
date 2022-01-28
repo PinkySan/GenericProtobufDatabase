@@ -121,7 +121,7 @@ public:
         using namespace google::protobuf::io;
         using namespace google::protobuf::compiler;
 
-        ArrayInputStream raw_input(text, strlen(text));
+        ArrayInputStream raw_input(text, static_cast<int>(strlen(text)));
         Tokenizer input(&raw_input, NULL);
 
         // Proto definition to a representation as used by the protobuf lib:

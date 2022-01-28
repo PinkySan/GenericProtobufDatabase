@@ -204,7 +204,10 @@ TEST_CASE_METHOD(databaseTester, "Reading and Writing binary representation - ow
         {
             std::string strValue;
             CHECK(db->Get(rocksdb::ReadOptions(), key, &strValue).ok());
-            valuesWithString getValues{.intValue = 42, .floatValue = 100.0f, .strValue{"max"}};
+            valuesWithString getValues;
+            getValues.intValue = 42;
+            getValues.floatValue = 100.0f;
+            getValues.strValue = "max";
             std::stringstream input{strValue};
             getValues.deserialize(input);
             CHECK(structValue.intValue == getValues.intValue);
@@ -253,7 +256,9 @@ TEST_CASE_METHOD(databaseTester, "Reading and Writing binary representation - ow
         {
             std::string strValue;
             CHECK(db->Get(rocksdb::ReadOptions(), key, &strValue).ok());
-            valuesWithMultipleString getValues{.strValue_1 = "Max", .strValue_2 = "Mustermann"};
+            valuesWithMultipleString getValues;
+            getValues.strValue_1 = "Max";
+            getValues.strValue_2 = "Mustermann";
             std::stringstream input{strValue};
             getValues.deserialize(input);
             CHECK(structValue.strValue_1 == getValues.strValue_1);
