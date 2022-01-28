@@ -1,0 +1,44 @@
+configuration:
+    - Release
+    - Debug
+
+platform:
+    - x64
+
+# only valid for ubuntu at the moment
+stack: python 3.7
+
+environment:
+  matrix:
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+      GENERATOR: "Visual Studio 16 2019"
+    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu1804
+      GENERATOR: "Unix Makefiles"
+
+init:
+  - cmd: SET PATH=C:\Python37-x64;C:\Python37-x64\Scripts;%PATH%
+
+install:
+  - cmake --version
+  - python --version      #needs to be here due to stack issues
+  - pip --version         #needs to be here due to stack issues
+  - pip install conan
+
+before_build:
+  - conan remote add bincrafters https://api.bintray.com/conan/bincrafters/public-conan
+  - conan profile new default --detect
+  - sh: conan profile update settings.compiler.libcxx=libstdc++11 default
+  - ps: conan install . -s build_type="$env:CONFIGURATION" -if build
+  
+build_script:
+  - cd build
+  - cmd: cmake .. -G "%GENERATOR%" -A "%PLATFORM%" -DCMAKE_INSTALL_PREFIX="../install"
+  - sh: cmake .. -G "$GENERATOR" -DCMAKE_INSTALL_PREFIX="../install"
+  - ps: cmake --build . --config "$env:CONFIGURATION" --parallel 4
+
+# changing into folder to suppress errorcode by failed ctest
+test_script:
+  - ps: ctest --build-config "$env:CONFIGURATION" -VV
+after_test:
+  - ps: $wc = New-Object 'System.Net.WebClient'
+  - ps: Get-ChildItem -Path ./ -Filter *.xml -File -Name -Recurse | ForEach-Object {$wc.UploadFile("https://ci.appveyor.com/api/testresults/junit/$($env:APPVEYOR_JOB_ID)", (Resolve-Path ./$_))}
