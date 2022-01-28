@@ -1,0 +1,55 @@
+name: Windows
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: Builder on ${{ matrix.build_type }}
+    runs-on: windows-latest
+    continue-on-error: false
+    defaults:
+      run:
+        shell: bash
+
+    strategy:
+      matrix:
+        build_type: [Release]
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install conan
+        conan profile new default --detect
+    - name: Display versions
+      run: |
+        cmake --version | head -n 1
+        conan --version | head -n 1
+        conan profile show default
+    - name: install conan dependencies
+      run: conan install . -if build -s build_type=${{matrix.build_type}} -s compiler.version=15
+    - name: cmake
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE:STRING=${{matrix.build_type}} -DCMAKE_TOOLCHAIN_FILE:PATH=./build/conan_paths.cmake
+    - name: build
+      run: cmake --build build --config ${{matrix.build_type}} --parallel 4
+    - name: test
+      run: | 
+        cd build
+        ctest -C ${{matrix.build_type}} -j 4 --output-on-failure || exit 0
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2.2.2
+      with:
+          name: Testresults_${{matrix.build_type}}
+          path: build/testresult
+    - name: Publish Unit Test Results
+      uses: EnricoMi/publish-unit-test-result-action/composite@v1
+      if: always()
+      with:
+          files: build/testresult/*.xml
+          check_run_annotations: all tests, skipped tests
+          check_name: Test results windows
