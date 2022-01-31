@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <iostream>
 #include <numeric>
+#include <future>
 #include <rocksdb/db.h>
 
 struct databaseTester
@@ -304,6 +305,71 @@ TEST_CASE_METHOD(databaseTester, "ColumnFamily")
                 CHECK(db->Get(rocksdb::ReadOptions(),cf,key,&value).ok());
                 CHECK_FALSE(db->Get(rocksdb::ReadOptions(),db->DefaultColumnFamily(),key,&value).ok());
                 CHECK(value == "42");
+            }
+        }
+    }
+}
+
+
+class dbWriter
+{
+    private:
+        rocksdb::DB *_db = nullptr;
+    public:
+        ~dbWriter()
+        {
+            if(_db)
+            {
+                _db->Close();
+                delete _db;
+            }
+        }
+        
+        bool init(const std::filesystem::path &path)
+        {
+            rocksdb::Options opts;
+            opts.create_if_missing = true;
+            return rocksdb::DB::Open(opts,path.string(),&_db).ok();
+        }
+        
+        template<int ctr, int numTrigger>
+        bool write(std::condition_variable &waitTrigger)
+        {
+            std::cout << std::this_thread::get_id() << "\tstarted writing"<< std::endl;
+            for(size_t idx = 0; idx < ctr; ++idx)
+            {
+                if(!_db->Put(rocksdb::WriteOptions(),std::to_string(idx), std::to_string(rand())).ok())
+                {
+                    return false;
+                }
+                if(numTrigger == idx)
+                {
+                    std::cout << "trigger" << std::endl;
+                    waitTrigger.notify_all();
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            std::cout << std::this_thread::get_id() << "\tfinished writing"<< std::endl;
+            return true;
+        }
+};
+
+TEST_CASE_METHOD(databaseTester,"multithreading")
+{
+    WHEN("I create a writing thread")
+    {
+        dbWriter writer;
+        AND_WHEN("I write some values and then create a reading thread")
+        {
+            REQUIRE(writer.init(filepath));
+            THEN("I should run both threads in parallel")
+            {
+                std::mutex mtx;
+                std::condition_variable cv;
+                auto writerThread = std::async(&dbWriter::write<100,20>, &writer,std::ref(cv));
+                std::unique_lock<std::mutex> lk(mtx);
+                CHECK(std::cv_status::no_timeout == cv.wait_for(lk,std::chrono::seconds(1)));
+                CHECK(writerThread.get());
             }
         }
     }
