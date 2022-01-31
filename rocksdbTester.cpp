@@ -1,9 +1,10 @@
 #include <catch2/catch.hpp>
 #include <filesystem>
+#include <future>
 #include <iostream>
 #include <numeric>
-#include <future>
 #include <rocksdb/db.h>
+
 
 struct databaseTester
 {
@@ -22,7 +23,7 @@ struct databaseTester
     {
         if (db)
         {
-            if(cf)
+            if (cf)
             {
                 db->DestroyColumnFamilyHandle(cf);
             }
@@ -206,9 +207,9 @@ TEST_CASE_METHOD(databaseTester, "Reading and Writing binary representation - ow
             std::string strValue;
             CHECK(db->Get(rocksdb::ReadOptions(), key, &strValue).ok());
             valuesWithString getValues;
-            getValues.intValue = 42;
+            getValues.intValue   = 42;
             getValues.floatValue = 100.0f;
-            getValues.strValue = "max";
+            getValues.strValue   = "max";
             std::stringstream input{strValue};
             getValues.deserialize(input);
             CHECK(structValue.intValue == getValues.intValue);
@@ -286,75 +287,117 @@ TEST_CASE_METHOD(databaseTester, "ColumnFamily")
         WHEN("I write a key value pair to the default column")
         {
             const std::string key = "key_1";
-            REQUIRE(db->Put(rocksdb::WriteOptions(),"key_1","42").ok());
+            REQUIRE(db->Put(rocksdb::WriteOptions(), "key_1", "42").ok());
             THEN("I cannot read it from the other column")
             {
                 std::string value;
-                CHECK_FALSE(db->Get(rocksdb::ReadOptions(),cf,key,&value).ok());
-                CHECK(db->Get(rocksdb::ReadOptions(),db->DefaultColumnFamily(),key,&value).ok());
+                CHECK_FALSE(db->Get(rocksdb::ReadOptions(), cf, key, &value).ok());
+                CHECK(db->Get(rocksdb::ReadOptions(), db->DefaultColumnFamily(), key, &value).ok());
                 CHECK(value == "42");
             }
         }
         WHEN("I write a key value pair to the other column")
         {
             const std::string key = "key_1";
-            REQUIRE(db->Put(rocksdb::WriteOptions(),cf, "key_1", "42").ok());
+            REQUIRE(db->Put(rocksdb::WriteOptions(), cf, "key_1", "42").ok());
             THEN("I cannot read it from the other column")
             {
                 std::string value;
-                CHECK(db->Get(rocksdb::ReadOptions(),cf,key,&value).ok());
-                CHECK_FALSE(db->Get(rocksdb::ReadOptions(),db->DefaultColumnFamily(),key,&value).ok());
+                CHECK(db->Get(rocksdb::ReadOptions(), cf, key, &value).ok());
+                CHECK_FALSE(db->Get(rocksdb::ReadOptions(), db->DefaultColumnFamily(), key, &value).ok());
                 CHECK(value == "42");
             }
         }
     }
 }
 
-
 class dbWriter
 {
-    private:
-        rocksdb::DB *_db = nullptr;
-    public:
-        ~dbWriter()
+private:
+    rocksdb::DB *_db = nullptr;
+
+public:
+    ~dbWriter()
+    {
+        if (_db)
         {
-            if(_db)
+            _db->Close();
+            delete _db;
+        }
+    }
+
+    bool init(const std::filesystem::path &path)
+    {
+        rocksdb::Options opts;
+        opts.create_if_missing = true;
+        return rocksdb::DB::Open(opts, path.string(), &_db).ok();
+    }
+
+    template <int ctr, int numTrigger>
+    bool write(std::condition_variable &waitTrigger)
+    {
+        std::cout << std::this_thread::get_id() << "\tstarted writing" << std::endl;
+        for (size_t idx = 0; idx < ctr; ++idx)
+        {
+            if (!_db->Put(rocksdb::WriteOptions(), std::to_string(idx), std::to_string(rand())).ok())
             {
-                _db->Close();
-                delete _db;
+                return false;
             }
-        }
-        
-        bool init(const std::filesystem::path &path)
-        {
-            rocksdb::Options opts;
-            opts.create_if_missing = true;
-            return rocksdb::DB::Open(opts,path.string(),&_db).ok();
-        }
-        
-        template<int ctr, int numTrigger>
-        bool write(std::condition_variable &waitTrigger)
-        {
-            std::cout << std::this_thread::get_id() << "\tstarted writing"<< std::endl;
-            for(size_t idx = 0; idx < ctr; ++idx)
+            if (numTrigger == idx)
             {
-                if(!_db->Put(rocksdb::WriteOptions(),std::to_string(idx), std::to_string(rand())).ok())
-                {
-                    return false;
-                }
-                if(numTrigger == idx)
-                {
-                    std::cout << "trigger" << std::endl;
-                    waitTrigger.notify_all();
-                }
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                std::cout << "trigger" << std::endl;
+                //_db->Flush(rocksdb::FlushOptions());
+                waitTrigger.notify_all();
             }
-            std::cout << std::this_thread::get_id() << "\tfinished writing"<< std::endl;
-            return true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
+        std::cout << std::this_thread::get_id() << "\tfinished writing" << std::endl;
+        return true;
+    }
 };
 
-TEST_CASE_METHOD(databaseTester,"multithreading")
+class dbReader
+{
+private:
+    rocksdb::DB *_db = nullptr;
+    rocksdb::Iterator *_iter = nullptr;
+public:
+    ~dbReader()
+    {
+        if (_db)
+        {
+            if(_iter)
+            {
+                delete _iter;
+            }
+            _db->Close();
+            delete _db;
+        }
+    }
+
+    bool init(const std::filesystem::path &path)
+    {
+        rocksdb::Options opts;
+        opts.create_if_missing = true;
+        return rocksdb::DB::OpenForReadOnly(opts, path.string(), &_db).ok();
+    }
+
+    bool read()
+    {
+        std::cout << std::this_thread::get_id() << "\tstarted reading" << std::endl;
+        _iter = _db->NewIterator(rocksdb::ReadOptions());
+        _iter->SeekToLast();
+        if(!_iter->Valid())
+        {
+            return false;
+        }
+        std::cout << _iter->key().ToString() << "\t" << _iter->value().ToString() << std::endl;
+        std::cout << std::this_thread::get_id() << "\tfinished reading" << std::endl;
+        return true;
+    }
+};
+
+TEST_CASE_METHOD(databaseTester, "multithreading")
 {
     WHEN("I create a writing thread")
     {
@@ -362,13 +405,16 @@ TEST_CASE_METHOD(databaseTester,"multithreading")
         AND_WHEN("I write some values and then create a reading thread")
         {
             REQUIRE(writer.init(filepath));
+            dbReader reader;
             THEN("I should run both threads in parallel")
             {
                 std::mutex mtx;
                 std::condition_variable cv;
-                auto writerThread = std::async(&dbWriter::write<100,20>, &writer,std::ref(cv));
+                auto writerThread = std::async(&dbWriter::write<100, 20>, &writer, std::ref(cv));
                 std::unique_lock<std::mutex> lk(mtx);
-                CHECK(std::cv_status::no_timeout == cv.wait_for(lk,std::chrono::seconds(1)));
+                CHECK(std::cv_status::no_timeout == cv.wait_for(lk, std::chrono::seconds(1)));
+                REQUIRE(reader.init(filepath));
+                CHECK(reader.read());
                 CHECK(writerThread.get());
             }
         }
