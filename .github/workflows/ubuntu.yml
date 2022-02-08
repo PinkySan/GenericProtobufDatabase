@@ -33,7 +33,7 @@ jobs:
     - name: install conan dependencies
       run: conan install . -if build -s compiler.libcxx=libstdc++11 -s build_type=${{matrix.build_type}}
     - name: cmake
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE:STRING=${{matrix.build_type}} -DCMAKE_TOOLCHAIN_FILE:PATH=./build/conan_paths.cmake
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE:STRING=${{matrix.build_type}} -DCMAKE_TOOLCHAIN_FILE:PATH=./build/conan_paths.cmake -DEXPORT_TESTRESULTS:BOOL=ON
     - name: build
       run: cmake --build build --parallel 4
     - name: test

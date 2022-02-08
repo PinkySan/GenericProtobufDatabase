@@ -34,7 +34,7 @@ jobs:
     - name: install conan dependencies
       run: conan install . -if build -s build_type=${{matrix.build_type}} -s compiler.version=15
     - name: cmake
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE:STRING=${{matrix.build_type}} -DCMAKE_TOOLCHAIN_FILE:PATH=./build/conan_paths.cmake
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE:STRING=${{matrix.build_type}} -DCMAKE_TOOLCHAIN_FILE:PATH=./build/conan_paths.cmake -DEXPORT_TESTRESULTS:BOOL=ON
     - name: build
       run: cmake --build build --config ${{matrix.build_type}} --parallel 4
     - name: test
