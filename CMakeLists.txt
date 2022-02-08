@@ -1,17 +1,12 @@
 cmake_minimum_required(VERSION 3.0)
 project(database LANGUAGES CXX)
 
+set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH};${CMAKE_CURRENT_SOURCE_DIR})
 find_package(RocksDB REQUIRED)
 find_package(Catch2 REQUIRED)
 find_package(Protobuf REQUIRED)
+find_package(testUtils REQUIRED)
 enable_testing()
-
-function(addCatchTest targetname)
-    add_executable(${targetname} ${ARGN})
-    target_link_libraries(${targetname} PRIVATE Catch2::Catch2)
-    target_compile_definitions(${targetname} PRIVATE CATCH_CONFIG_MAIN)
-    add_test(NAME ${targetname} COMMAND ${targetname})
-endfunction()
 
 addCatchTest(rocksdbTester rocksdbTester.cpp)
 target_link_libraries(rocksdbTester PRIVATE RocksDB::rocksdb)
